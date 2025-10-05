@@ -1,0 +1,62 @@
+{
+  "name": "aidb",
+  "version": "1.0.0",
+  "description": "AI-optimized database schema utility for intelligent database interaction",
+  "keywords": [
+    "database",
+    "schema",
+    "ai",
+    "mysql",
+    "postgresql",
+    "mssql",
+    "sqlite",
+    "mongodb",
+    "db2",
+    "oracle",
+    "azure-sql",
+    "cli"
+  ],
+  "author": "AI Database Helper Contributors",
+  "license": "MIT",
+  "bin": {
+    "aidb": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "npm run build:contracts && npm run build:core && npm run build:adapters && npm run build:cli",
+    "build:contracts": "cd packages/contracts && npm run build",
+    "build:core": "cd packages/core && npm run build",
+    "build:adapters": "cd packages/adapters && npm run build",
+    "build:cli": "cd packages/cli && npm run build",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run",
+    "test:integration": "docker-compose -f test-harnesses/docker-compose.yml up -d && vitest run test-harnesses/integration",
+    "test:integration:down": "docker-compose -f test-harnesses/docker-compose.yml down",
+    "test:contracts": "vitest run test-harnesses/contract-tests",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"**/*.{ts,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,json,md}\"",
+    "clean": "rm -rf dist packages/*/dist",
+    "dev": "npm run build && node dist/cli/index.js",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@aidb/adapters",
+  "version": "1.0.0",
+  "description": "Database-specific adapter implementations",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "database",
+    "adapters",
+    "mysql",
+    "postgresql",
+    "mssql"
+  ],
+  "author": "AI Database Helper Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@aidb/contracts": "1.0.0",
+    "@aidb/core": "1.0.0",
+    "better-sqlite3": "^9.0.0",
+    "mongodb": "^6.20.0",
+    "mssql": "^10.0.4",
+    "mysql2": "^3.6.0",
+    "pg": "^8.11.0"
+  },
+  "optionalDependencies": {
+    "ibm_db": "^3.0.0",
+    "oracledb": "^6.9.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/mssql": "^9.1.0",
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  }
+}

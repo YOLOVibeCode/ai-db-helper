@@ -1,0 +1,26 @@
+{
+  "name": "@aidb/contracts",
+  "version": "1.0.0",
+  "description": "Interface contracts for AI Database Helper - ZERO dependencies",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "contracts",
+    "interfaces",
+    "database",
+    "typescript"
+  ],
+  "author": "AI Database Helper Contributors",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  }
+}

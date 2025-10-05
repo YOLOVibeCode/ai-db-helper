@@ -1,0 +1,35 @@
+{
+  "name": "@aidb/core",
+  "version": "1.0.0",
+  "description": "Core business logic for AI Database Helper",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "database",
+    "schema",
+    "core"
+  ],
+  "author": "AI Database Helper Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@aidb/contracts": "1.0.0",
+    "fast-levenshtein": "^3.0.0",
+    "graphlib": "^2.1.8",
+    "pluralize": "^8.0.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/graphlib": "^2.1.12",
+    "@types/node": "^20.10.0",
+    "@types/pluralize": "^0.0.33",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.4"
+  }
+}
