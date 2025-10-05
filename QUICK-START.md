@@ -4,6 +4,19 @@
 
 ---
 
+## 🌟 Key Feature: Multi-Database Support
+
+**Connect to ALL your databases simultaneously!**
+- ✅ Main application database
+- ✅ Analytics/reporting database
+- ✅ Legacy systems
+- ✅ Microservices databases
+- ✅ MongoDB + SQL together
+
+**AI gets complete visibility across your entire data ecosystem.**
+
+---
+
 ## 🚀 Installation
 
 ```bash
@@ -16,16 +29,36 @@ npx @yolovibecode/aidb --help
 
 ---
 
-## ⚡ Quick Start (3 Steps)
+## ⚡ Quick Start (Connect Multiple Databases)
 
-### **Step 1: Connect to Your Database**
+### **Step 1: Connect to Your Databases**
 
 ```bash
-# Using connection string (easiest)
-aidb connect mydb --connection-string "mysql://user:pass@localhost:3306/mydb"
+# Connect to your main database
+aidb connect main_app --connection-string "mysql://user:pass@localhost:3306/app"
 
-# Or specify details manually
-aidb connect mydb --type mysql --host localhost --database mydb --user root --password secret
+# Connect to your analytics database
+aidb connect analytics --connection-string "postgresql://user:pass@localhost:5432/analytics"
+
+# Connect to your logging/monitoring database
+aidb connect logs --connection-string "mssql://sa:Pass@localhost:1433/logs"
+
+# Connect to MongoDB for real-time data
+aidb connect realtime --connection-string "mongodb://user:pass@localhost:27017/realtime"
+
+# List all connected databases
+aidb list
+```
+
+**Output:**
+```
+Connected Databases:
+├─ main_app (mysql) - 23 tables
+├─ analytics (postgresql) - 8 tables
+├─ logs (mssql) - 5 tables
+└─ realtime (mongodb) - 3 collections
+
+Total: 4 databases cached locally
 ```
 
 **Supported Databases:**
@@ -507,3 +540,80 @@ aidb schema mydb
 ---
 
 **Made with ❤️ for AI-powered development**
+
+---
+
+## 🌐 Multi-Database Scenarios
+
+### **Scenario: Microservices Architecture**
+
+**Your application uses 3 databases:**
+```bash
+# User service
+aidb connect users "mysql://user:pass@users-db:3306/users"
+
+# Order service
+aidb connect orders "postgresql://user:pass@orders-db:5432/orders"
+
+# Inventory service
+aidb connect inventory "mysql://user:pass@inv-db:3306/inventory"
+```
+
+**Now ask AI:**
+> "Create a report showing user orders with inventory status"
+
+**AI Response:**
+```
+I see your data is across 3 databases. Here's the strategy:
+
+1. Query users.users for user data
+2. Query orders.orders for order information
+3. Query inventory.stock for availability
+4. Combine in application layer
+
+Query 1 (users database):
+SELECT id, email, name FROM users WHERE email = ?
+
+Query 2 (orders database):
+SELECT id, user_id, product_id, quantity
+FROM orders WHERE user_id = ?
+
+Query 3 (inventory database):
+SELECT product_id, quantity_available
+FROM stock WHERE product_id IN (?)
+
+Application code to merge:
+[JavaScript/TypeScript example provided]
+```
+
+### **Scenario: Main DB + Analytics**
+
+```bash
+aidb connect prod "mysql://app:pass@prod:3306/ecommerce"
+aidb connect analytics "postgresql://analyst:pass@analytics:5432/warehouse"
+```
+
+**AI now knows:**
+- Operational queries → Use `prod`
+- Reports/analytics → Use `analytics`
+- Which tables are in which database
+- Schema differences between them
+
+### **Scenario: Legacy + Modern Stack**
+
+```bash
+aidb connect legacy "oracle://user:pass@legacy:1521/ORCL"
+aidb connect modern "postgresql://user:pass@modern:5432/app"
+```
+
+**Ask AI:** "Help me migrate data from legacy to modern"
+
+**AI can:**
+- Compare schemas
+- Generate migration SQL
+- Identify data type conversions
+- Map old columns to new columns
+
+**See complete guide:** [MULTI-DATABASE-GUIDE.md](MULTI-DATABASE-GUIDE.md)
+
+---
