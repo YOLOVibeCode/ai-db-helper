@@ -1,5 +1,5 @@
 {
-  "name": "aidb",
+  "name": "@yolovibecode/aidb",
   "version": "1.0.0",
   "description": "AI-optimized database schema utility for intelligent database interaction",
   "keywords": [
@@ -14,13 +14,31 @@
     "db2",
     "oracle",
     "azure-sql",
-    "cli"
+    "cli",
+    "database-intelligence",
+    "schema-cache",
+    "relationship-discovery"
   ],
-  "author": "AI Database Helper Contributors",
+  "author": "YOLO Vibe Code",
   "license": "MIT",
-  "bin": {
-    "aidb": "./dist/cli/index.js"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOLOVibeCode/ai-db-helper.git"
   },
+  "homepage": "https://github.com/YOLOVibeCode/ai-db-helper#readme",
+  "bugs": {
+    "url": "https://github.com/YOLOVibeCode/ai-db-helper/issues"
+  },
+  "bin": {
+    "aidb": "./packages/cli/dist/index.js"
+  },
+  "main": "./packages/core/dist/index.js",
+  "types": "./packages/core/dist/index.d.ts",
+  "files": [
+    "packages/*/dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "npm run build:contracts && npm run build:core && npm run build:adapters && npm run build:cli",
     "build:contracts": "cd packages/contracts && npm run build",
