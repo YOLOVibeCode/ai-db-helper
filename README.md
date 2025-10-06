@@ -11,12 +11,14 @@ AI Database Helper (aidb) is a command-line utility that creates AI-optimized re
 ## Features
 
 - **Multi-Database Support**: MySQL, PostgreSQL, MSSQL, SQLite, MongoDB, DB2, Oracle, Azure SQL
+- **Multiple Simultaneous Databases**: Connect to multiple databases at once - AI has visibility across your entire data ecosystem
 - **Relationship Intelligence**: Automatic discovery of explicit and inferred relationships with multiplicity detection (1:1, 1:N, N:N)
-- **Query Planning**: AI-assisted query optimization with index recommendations
+- **Query Execution**: Execute SQL queries directly via CLI with safety confirmations
+- **Index Advisory**: Comprehensive index recommendations with impact analysis and redundancy detection
 - **Schema Caching**: Lightning-fast schema retrieval (<100ms) from local cache
-- **Safe Schema Modifications**: Snapshot and rollback system for safe database changes
+- **Connection String Support**: Easy connection using standard database connection strings
 - **AI-Optimized Formats**: Export schemas in JSON, Markdown, DDL, Mermaid ER diagrams, and TypeScript interfaces
-- **Secure Credential Storage**: AES-256-GCM encrypted credential management
+- **Enhanced Help System**: Comprehensive examples and AI assistant guidance built into CLI
 - **CLI-First Design**: Built for automation and integration with AI workflows
 
 ## Quick Start
@@ -24,20 +26,43 @@ AI Database Helper (aidb) is a command-line utility that creates AI-optimized re
 ### Installation
 
 ```bash
-npm install -g aidb
+npm install -g @yolovibecode/aidb
 ```
 
 ### Connect to a Database
 
 ```bash
-# Connect to PostgreSQL
-aidb connect mydb --type postgres --host localhost --database myapp
+# Connect using connection string (easiest)
+aidb connect mydb --connection-string "mysql://user:pass@localhost:3306/myapp"
+aidb connect analytics --connection-string "postgresql://user:pass@host:5432/analytics"
+aidb connect logs --connection-string "mssql://sa:Password@host:1433/logs"
 
-# Connect to MySQL
-aidb connect proddb --type mysql --host db.example.com --database production
+# Or connect with individual parameters
+aidb connect mydb --type postgres --host localhost --database myapp
 
 # Connect to Azure SQL with managed identity
 aidb connect azure-prod --type azure-sql --auth managed-identity
+```
+
+### Multi-Database Usage
+
+AI Database Helper supports **multiple databases simultaneously** with complete visibility:
+
+```bash
+# Connect to all your databases
+aidb connect users-db --connection-string "mysql://..."
+aidb connect orders-db --connection-string "postgresql://..."
+aidb connect analytics --connection-string "mssql://..."
+
+# List all connected databases
+aidb list
+
+# View schemas across all databases
+aidb schema users-db
+aidb schema orders-db
+aidb schema analytics
+
+# AI now has complete visibility across your entire data ecosystem!
 ```
 
 ### View Schema
@@ -209,6 +234,8 @@ aidb schema largedb --exclude-tables *_audit,sessions
 - `aidb export <db-name> --output <file>` - Export schema to file
 - `aidb import <db-name> --input <file>` - Import schema from file
 - `aidb doctor` - Validate .aidb directory integrity
+- `aidb ai-info` - Show complete guide for AI assistants
+- `aidb exec <db-name> "<sql>"` - Execute SQL query directly
 
 ## Supported Databases
 
@@ -274,11 +301,14 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Roadmap
 
-### v1.0 (Current)
-- ✓ Multi-database support (7+ databases)
-- ✓ Relationship intelligence
-- ✓ Query planning & index advisory
-- ✓ Safe schema modifications with rollback
+### v1.0.1 (Current)
+- ✓ Multi-database support (8+ databases)
+- ✓ Relationship intelligence with multiplicity detection
+- ✓ Index advisory with comprehensive analysis
+- ✓ Connection string support for easy setup
+- ✓ Direct SQL query execution via CLI
+- ✓ Enhanced help system with AI guidance
+- ✓ Multiple simultaneous database connections
 - ✓ AI-optimized output formats
 
 ### v1.1 (Planned)
