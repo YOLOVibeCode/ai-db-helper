@@ -1,179 +1,25 @@
 /**
- * IndexAdvisor Implementation
+ * IndexAdvisor - Recommend and analyze database indexes
  *
- * Analyzes database schemas and queries to recommend optimal indexes
- * for performance improvement.
+ * Features:
+ * - Analyze schema for missing indexes
+ * - Analyze queries for index opportunities
+ * - Detect redundant and unused indexes
+ * - Estimate index impact
+ * - Generate optimal index set for workload
  */
 
 import {
   IIndexAdvisor,
-  IndexUsageStats,
-  QueryPattern,
   DatabaseSchema,
-  QueryPlan,
+  TableSchema,
   IndexRecommendation,
-  TableSchema
+  QueryPlan,
+  IndexUsageStats,
+  QueryPattern
 } from '@aidb/contracts';
 
-/**
- * SQL Parser utility for extracting query components
- */
-class SQLParser {
-  /**
-   * Extract table names from query
-   */
-  extractTables(query: string): string[] {
-    const tables: string[] = [];
-    const fromMatch = query.match(/FROM\s+(\w+)/gi);
-    const joinMatch = query.match(/JOIN\s+(\w+)/gi);
-
-    if (fromMatch) {
-      fromMatch.forEach(match => {
-        const table = match.replace(/FROM\s+/i, '').trim();
-        if (!tables.includes(table)) tables.push(table);
-      });
-    }
-
-    if (joinMatch) {
-      joinMatch.forEach(match => {
-        const table = match.replace(/JOIN\s+/i, '').trim();
-        if (!tables.includes(table)) tables.push(table);
-      });
-    }
-
-    return tables;
-  }
-
-  /**
-   * Extract WHERE clause columns
-   */
-  extractWhereColumns(query: string, tableName?: string): string[] {
-    const columns: string[] = [];
-    // Match WHERE clause, stop at ORDER BY, GROUP BY, LIMIT, HAVING, or end
-    const whereMatch = query.match(/WHERE\s+(.+?)(?:\s+ORDER\s+BY|\s+GROUP\s+BY|\s+LIMIT|\s+HAVING|$)/is);
-
-    if (whereMatch) {
-      const whereClause = whereMatch[1].trim();
-
-      // Match patterns: column_name =, table.column_name =, column_name >, etc.
-      // This regex captures optional table prefix and column name before operators
-      const regex = /(\w+\.)?(\w+)\s*(=|>|<|>=|<=|!=|<>|IN|LIKE|BETWEEN)/gi;
-      let match;
-
-      while ((match = regex.exec(whereClause)) !== null) {
-        const tablePart = match[1] ? match[1].slice(0, -1) : null; // Remove trailing dot
-        const column = match[2];
-
-        // Filter out SQL keywords and comparison values
-        const keywords = ['AND', 'OR', 'NOT', 'NULL', 'TRUE', 'FALSE', 'IS'];
-        if (keywords.includes(column.toUpperCase())) {
-          continue;
-        }
-
-        // If table name specified, only include columns from that table
-        if (tableName) {
-          if (tablePart === tableName || (!tablePart && !columns.includes(column))) {
-            if (!columns.includes(column)) {
-              columns.push(column);
-            }
-          }
-        } else {
-          // No specific table filter - add all columns
-          if (!columns.includes(column)) {
-            columns.push(column);
-          }
-        }
-      }
-    }
-
-    return columns;
-  }
-
-  /**
-   * Extract JOIN columns
-   */
-  extractJoinColumns(query: string): Array<{ table: string; column: string }> {
-    const joins: Array<{ table: string; column: string }> = [];
-    const joinMatches = query.match(/JOIN\s+(\w+)\s+ON\s+(\w+\.\w+)\s*=\s*(\w+\.\w+)/gi);
-
-    if (joinMatches) {
-      joinMatches.forEach(match => {
-        const parts = match.match(/JOIN\s+(\w+)\s+ON\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i);
-        if (parts) {
-          joins.push({ table: parts[2], column: parts[3] });
-          joins.push({ table: parts[4], column: parts[5] });
-        }
-      });
-    }
-
-    return joins;
-  }
-
-  /**
-   * Extract ORDER BY columns
-   */
-  extractOrderByColumns(query: string): string[] {
-    const columns: string[] = [];
-    const orderMatch = query.match(/ORDER BY\s+(.+?)(?:LIMIT|$)/is);
-
-    if (orderMatch) {
-      const orderClause = orderMatch[1];
-      const columnMatches = orderClause.match(/(\w+\.)?(\w+)/g);
-
-      if (columnMatches) {
-        columnMatches.forEach(match => {
-          const parts = match.split('.');
-          const column = parts.length > 1 ? parts[1] : parts[0];
-          if (!['ASC', 'DESC'].includes(column.toUpperCase()) && !columns.includes(column)) {
-            columns.push(column);
-          }
-        });
-      }
-    }
-
-    return columns;
-  }
-
-  /**
-   * Extract GROUP BY columns
-   */
-  extractGroupByColumns(query: string): string[] {
-    const columns: string[] = [];
-    const groupMatch = query.match(/GROUP BY\s+(.+?)(?:ORDER BY|LIMIT|$)/is);
-
-    if (groupMatch) {
-      const groupClause = groupMatch[1];
-      const columnMatches = groupClause.match(/(\w+\.)?(\w+)/g);
-
-      if (columnMatches) {
-        columnMatches.forEach(match => {
-          const parts = match.split('.');
-          const column = parts.length > 1 ? parts[1] : parts[0];
-          if (!columns.includes(column)) {
-            columns.push(column);
-          }
-        });
-      }
-    }
-
-    return columns;
-  }
-
-  /**
-   * Detect FULLTEXT search
-   */
-  hasFulltextSearch(query: string): boolean {
-    return query.match(/MATCH\s*\(.+?\)\s+AGAINST/i) !== null;
-  }
-}
-
 export class IndexAdvisor implements IIndexAdvisor {
-  private parser: SQLParser;
-
-  constructor() {
-    this.parser = new SQLParser();
-  }
-
   /**
    * Analyze schema and recommend indexes
    */
@@ -181,43 +27,91 @@ export class IndexAdvisor implements IIndexAdvisor {
     const recommendations: IndexRecommendation[] = [];
 
     for (const table of schema.tables) {
-      // Check for foreign key columns without indexes
-      const fkColumns = this.detectForeignKeyColumns(table);
-      for (const fkCol of fkColumns) {
-        if (!this.hasIndexOnColumn(table, fkCol)) {
-          recommendations.push({
-            tableName: table.name,
-            columns: [fkCol],
-            type: 'btree',
-            reason: `Foreign key column likely used in JOINs`,
-            priority: 'high',
-            estimatedImpact: 80,
-            createStatement: `CREATE INDEX idx_${table.name}_${fkCol} ON ${table.name}(${fkCol})`
-          });
-        }
+      // Skip very small tables (< 100 rows)
+      if (table.rowCount !== undefined && table.rowCount < 100) {
+        continue;
       }
 
-      // Check for common columns that should be indexed
-      const commonColumns = ['email', 'username', 'status', 'created_at', 'updated_at'];
-      for (const col of table.columns) {
-        if (commonColumns.includes(col.name) && !this.hasIndexOnColumn(table, col.name)) {
-          recommendations.push({
-            tableName: table.name,
-            columns: [col.name],
-            type: 'btree',
-            reason: `Commonly queried column`,
-            priority: 'medium',
-            estimatedImpact: 60,
-            createStatement: `CREATE INDEX idx_${table.name}_${col.name} ON ${table.name}(${col.name})`
-          });
+      // Check for missing indexes on foreign key columns
+      const fkRecommendations = this.analyzeForeignKeys(table);
+      recommendations.push(...fkRecommendations);
+
+      // Check for high-cardinality columns without indexes
+      const cardinalityRecs = this.analyzeCardinality(table);
+      recommendations.push(...cardinalityRecs);
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * Analyze foreign key columns for missing indexes
+   */
+  private analyzeForeignKeys(table: TableSchema): IndexRecommendation[] {
+    const recommendations: IndexRecommendation[] = [];
+    const existingIndexColumns = new Set(
+      table.indexes.flatMap(idx => idx.columns)
+    );
+
+    for (const constraint of table.constraints) {
+      if (constraint.type === 'FOREIGN KEY' && constraint.columns) {
+        for (const column of constraint.columns) {
+          // Check if column already has an index
+          if (!existingIndexColumns.has(column)) {
+            recommendations.push({
+              tableName: table.name,
+              columns: [column],
+              type: 'btree',
+              reason: `Foreign key column without index - impacts JOIN performance`,
+              priority: 'high',
+              estimatedImpact: 70,
+              createStatement: this.generateCreateIndexSQL(table.name, [column])
+            });
+          }
         }
       }
     }
 
-    // Limit to most impactful recommendations
-    return recommendations
-      .sort((a, b) => b.estimatedImpact - a.estimatedImpact)
-      .slice(0, 10);
+    return recommendations;
+  }
+
+  /**
+   * Analyze column cardinality for index opportunities
+   */
+  private analyzeCardinality(table: TableSchema): IndexRecommendation[] {
+    const recommendations: IndexRecommendation[] = [];
+    const existingIndexColumns = new Set(
+      table.indexes.flatMap(idx => idx.columns)
+    );
+
+    // Look for likely high-cardinality columns (email, uuid, etc.)
+    const highCardinalityPatterns = ['email', 'uuid', 'guid', 'token', 'code'];
+
+    for (const column of table.columns) {
+      if (existingIndexColumns.has(column.name)) {
+        continue; // Already indexed
+      }
+
+      // Check column name patterns
+      const columnNameLower = column.name.toLowerCase();
+      const isHighCardinality = highCardinalityPatterns.some(
+        pattern => columnNameLower.includes(pattern)
+      );
+
+      if (isHighCardinality) {
+          recommendations.push({
+            tableName: table.name,
+          columns: [column.name],
+            type: 'btree',
+          reason: `High-cardinality column (${column.name}) likely used in WHERE clauses`,
+            priority: 'medium',
+            estimatedImpact: 60,
+          createStatement: this.generateCreateIndexSQL(table.name, [column.name])
+          });
+      }
+    }
+
+    return recommendations;
   }
 
   /**
@@ -225,112 +119,138 @@ export class IndexAdvisor implements IIndexAdvisor {
    */
   async analyzeQuery(query: string, schema: DatabaseSchema): Promise<IndexRecommendation[]> {
     const recommendations: IndexRecommendation[] = [];
+    const parsedQuery = this.parseQuery(query);
 
-    // Handle FULLTEXT search
-    if (this.parser.hasFulltextSearch(query)) {
-      const tables = this.parser.extractTables(query);
-      if (tables.length > 0) {
-        const match = query.match(/MATCH\s*\(([^)]+)\)/i);
-        if (match) {
-          const columns = match[1].split(',').map(c => c.trim());
+    for (const table of parsedQuery.tables) {
+      const tableSchema = schema.tables.find(t => t.name === table);
+      if (!tableSchema) continue;
+
+      const existingIndexColumns = new Set(
+        tableSchema.indexes.flatMap(idx => idx.columns)
+      );
+
+      // Recommend indexes for WHERE clause columns
+      for (const column of parsedQuery.whereColumns) {
+        if (!existingIndexColumns.has(column)) {
           recommendations.push({
-            tableName: tables[0],
-            columns,
-            type: 'fulltext',
-            reason: 'FULLTEXT search detected',
-            priority: 'high',
-            estimatedImpact: 95,
-            createStatement: `CREATE FULLTEXT INDEX idx_${tables[0]}_ft ON ${tables[0]}(${columns.join(', ')})`
-          });
-        }
-      }
-      return recommendations;
-    }
-
-    // Analyze WHERE clause
-    const tables = this.parser.extractTables(query);
-    for (const tableName of tables) {
-      const table = schema.tables.find(t => t.name === tableName);
-      if (!table) continue;
-
-      const whereColumns = this.parser.extractWhereColumns(query, tableName);
-
-      // Single column indexes
-      for (const column of whereColumns) {
-        if (!this.hasIndexOnColumn(table, column)) {
-          recommendations.push({
-            tableName: table.name,
+            tableName: table,
             columns: [column],
             type: 'btree',
-            reason: `WHERE clause on ${column}`,
+            reason: `WHERE clause filtering on ${column}`,
             priority: 'high',
-            estimatedImpact: 85,
-            createStatement: `CREATE INDEX idx_${table.name}_${column} ON ${table.name}(${column})`
+            estimatedImpact: 75,
+            createStatement: this.generateCreateIndexSQL(table, [column])
           });
         }
       }
 
-      // Composite indexes for multiple WHERE columns
-      if (whereColumns.length > 1) {
-        const hasComposite = table.indexes && table.indexes.some(idx =>
+      // Recommend indexes for JOIN columns
+      for (const column of parsedQuery.joinColumns) {
+        if (!existingIndexColumns.has(column)) {
+          recommendations.push({
+            tableName: table,
+            columns: [column],
+            type: 'btree',
+            reason: `JOIN condition on ${column}`,
+            priority: 'high',
+            estimatedImpact: 80,
+            createStatement: this.generateCreateIndexSQL(table, [column])
+          });
+        }
+      }
+
+      // Recommend composite index for WHERE + ORDER BY
+      if (parsedQuery.whereColumns.length > 0 && parsedQuery.orderByColumns.length > 0) {
+        const compositeColumns = [...parsedQuery.whereColumns, ...parsedQuery.orderByColumns];
+        const hasCompositeIndex = tableSchema.indexes.some(idx => 
           idx.columns.length > 1 &&
-          whereColumns.every(col => idx.columns.includes(col))
+          compositeColumns.every(col => idx.columns.includes(col))
         );
 
-        if (!hasComposite) {
+        if (!hasCompositeIndex) {
           recommendations.push({
-            tableName: table.name,
-            columns: whereColumns,
+            tableName: table,
+            columns: compositeColumns,
             type: 'btree',
-            reason: `Multiple WHERE columns`,
-            priority: 'high',
-            estimatedImpact: 90,
-            createStatement: `CREATE INDEX idx_${table.name}_${whereColumns.join('_')} ON ${table.name}(${whereColumns.join(', ')})`
+            reason: `Composite index for WHERE + ORDER BY optimization`,
+            priority: 'medium',
+            estimatedImpact: 65,
+            createStatement: this.generateCreateIndexSQL(table, compositeColumns)
           });
         }
       }
     }
 
-    // Analyze JOIN columns
-    const joinColumns = this.parser.extractJoinColumns(query);
-    for (const join of joinColumns) {
-      const table = schema.tables.find(t => t.name === join.table);
-      if (table && !this.hasIndexOnColumn(table, join.column)) {
-        recommendations.push({
-          tableName: join.table,
-          columns: [join.column],
-          type: 'btree',
-          reason: `JOIN condition on ${join.column}`,
-          priority: 'high',
-          estimatedImpact: 85,
-          createStatement: `CREATE INDEX idx_${join.table}_${join.column} ON ${join.table}(${join.column})`
-        });
+    return recommendations;
+  }
+
+  /**
+   * Simple SQL query parser
+   */
+  private parseQuery(query: string): QueryPattern {
+    const queryLower = query.toLowerCase();
+    
+    const pattern: QueryPattern = {
+      tables: [],
+      whereColumns: [],
+      joinColumns: [],
+      orderByColumns: [],
+      groupByColumns: [],
+      frequency: 1
+    };
+
+    // Extract tables
+    const fromMatch = queryLower.match(/from\s+(\w+)/);
+    if (fromMatch) {
+      pattern.tables.push(fromMatch[1]);
+    }
+
+    const joinMatches = queryLower.matchAll(/join\s+(\w+)/g);
+    for (const match of joinMatches) {
+      pattern.tables.push(match[1]);
+    }
+
+    // Extract WHERE columns (simplified)
+    const whereMatch = queryLower.match(/where\s+(.+?)(?:order\s+by|group\s+by|limit|$)/);
+    if (whereMatch) {
+      const whereClause = whereMatch[1];
+      const columnMatches = whereClause.matchAll(/(\w+)\s*[=<>]/g);
+      for (const match of columnMatches) {
+        pattern.whereColumns.push(match[1]);
       }
     }
 
-    // Analyze ORDER BY columns
-    const orderByColumns = this.parser.extractOrderByColumns(query);
-    for (const column of orderByColumns) {
-      for (const tableName of tables) {
-        const table = schema.tables.find(t => t.name === tableName);
-        if (table && table.columns.find(c => c.name === column)) {
-          if (!this.hasIndexOnColumn(table, column)) {
-            recommendations.push({
-              tableName: table.name,
-              columns: [column],
-              type: 'btree',
-              reason: `ORDER BY clause on ${column}`,
-              priority: 'medium',
-              estimatedImpact: 70,
-              createStatement: `CREATE INDEX idx_${table.name}_${column} ON ${table.name}(${column})`
-            });
-          }
+    // Extract JOIN columns
+    const joinCondMatches = queryLower.matchAll(/on\s+\w+\.(\w+)\s*=\s*\w+\.(\w+)/g);
+    for (const match of joinCondMatches) {
+      pattern.joinColumns.push(match[1], match[2]);
+    }
+
+    // Extract ORDER BY columns
+    const orderByMatch = queryLower.match(/order\s+by\s+(.+?)(?:limit|$)/);
+    if (orderByMatch) {
+      const orderCols = orderByMatch[1].split(',');
+      for (const col of orderCols) {
+        const colMatch = col.trim().match(/(\w+)/);
+        if (colMatch) {
+          pattern.orderByColumns.push(colMatch[1]);
         }
       }
     }
 
-    // Remove duplicates and return
-    return this.deduplicateRecommendations(recommendations);
+    // Extract GROUP BY columns
+    const groupByMatch = queryLower.match(/group\s+by\s+(.+?)(?:order\s+by|limit|$)/);
+    if (groupByMatch) {
+      const groupCols = groupByMatch[1].split(',');
+      for (const col of groupCols) {
+        const colMatch = col.trim().match(/(\w+)/);
+        if (colMatch) {
+          pattern.groupByColumns.push(colMatch[1]);
+        }
+      }
+    }
+
+    return pattern;
   }
 
   /**
@@ -339,56 +259,19 @@ export class IndexAdvisor implements IIndexAdvisor {
   async analyzePlan(plan: QueryPlan, schema: DatabaseSchema): Promise<IndexRecommendation[]> {
     const recommendations: IndexRecommendation[] = [];
 
-    // Use suggested indexes from plan
-    for (const suggestion of plan.suggestedIndexes) {
-      recommendations.push({
-        tableName: suggestion.tableName,
-        columns: suggestion.columns,
-        type: suggestion.type,
-        reason: suggestion.reason,
-        priority: suggestion.priority,
-        estimatedImpact: suggestion.estimatedImprovement,
-        createStatement: suggestion.createStatement
-      });
-    }
-
-    // Analyze warnings for additional recommendations
+    // Analyze warnings for index opportunities
     for (const warning of plan.warnings) {
-      if (warning.code === 'FULL_TABLE_SCAN') {
-        // Try to get table name from affectedTable or extract from message
-        let tableName = warning.affectedTable;
-        if (!tableName && warning.message) {
-          // Extract table name from message like "Full table scan on posts (50000 rows)"
-          const match = warning.message.match(/table scan on (\w+)/i);
-          if (match) {
-            tableName = match[1];
-          }
-        }
-
-        if (tableName) {
-          const table = schema.tables.find(t => t.name === tableName);
-          if (table && table.rowCount && table.rowCount > 1000) {
-            // High priority for large tables
-            const whereColumns = this.parser.extractWhereColumns(plan.originalQuery, tableName);
-            for (const column of whereColumns) {
-              if (!this.hasIndexOnColumn(table, column)) {
-                recommendations.push({
-                  tableName,
-                  columns: [column],
-                  type: 'btree',
-                  reason: `Full table scan on large table (${table.rowCount} rows)`,
-                  priority: 'high',
-                  estimatedImpact: 90,
-                  createStatement: `CREATE INDEX idx_${tableName}_${column} ON ${tableName}(${column})`
-                });
-              }
-            }
-          }
+      if (warning.code === 'FULL_TABLE_SCAN' && warning.affectedTable) {
+        const table = schema.tables.find(t => t.name === warning.affectedTable);
+        if (table) {
+          // Recommend index based on query structure
+          const queryRecs = await this.analyzeQuery(plan.originalQuery, schema);
+          recommendations.push(...queryRecs);
         }
       }
     }
 
-    return this.deduplicateRecommendations(recommendations);
+    return recommendations;
   }
 
   /**
@@ -397,32 +280,32 @@ export class IndexAdvisor implements IIndexAdvisor {
   async analyzeQueryPatterns(
     queries: string[],
     schema: DatabaseSchema
-  ): Promise<{ patterns: QueryPattern[]; recommendations: IndexRecommendation[] }> {
+  ): Promise<{
+    patterns: QueryPattern[];
+    recommendations: IndexRecommendation[];
+  }> {
     const patternMap = new Map<string, QueryPattern>();
+    const columnUsage = new Map<string, number>();
 
-    // Analyze each query
+    // Parse all queries
     for (const query of queries) {
-      const tables = this.parser.extractTables(query);
-      const whereColumns = this.parser.extractWhereColumns(query);
-      const joinColumns = this.parser.extractJoinColumns(query).map(j => j.column);
-      const orderByColumns = this.parser.extractOrderByColumns(query);
-      const groupByColumns = this.parser.extractGroupByColumns(query);
+      const pattern = this.parseQuery(query);
+      
+      // Count column usage
+      for (const column of [...pattern.whereColumns, ...pattern.joinColumns]) {
+        columnUsage.set(column, (columnUsage.get(column) || 0) + 1);
+      }
 
-      // Create pattern key
-      const key = `${tables.join(',')}_${whereColumns.sort().join(',')}_${joinColumns.sort().join(',')}`;
+      // Track patterns
+      const key = JSON.stringify({
+        tables: pattern.tables.sort(),
+        whereColumns: pattern.whereColumns.sort()
+      });
 
       if (patternMap.has(key)) {
-        const pattern = patternMap.get(key)!;
-        pattern.frequency++;
+        patternMap.get(key)!.frequency++;
       } else {
-        patternMap.set(key, {
-          tables,
-          whereColumns,
-          joinColumns,
-          orderByColumns,
-          groupByColumns,
-          frequency: 1
-        });
+        patternMap.set(key, pattern);
       }
     }
 
@@ -430,24 +313,22 @@ export class IndexAdvisor implements IIndexAdvisor {
     const recommendations: IndexRecommendation[] = [];
 
     // Generate recommendations based on frequency
-    for (const pattern of patterns) {
-      if (pattern.frequency >= 2) {
-        // Recommend indexes for frequently used columns
-        for (const tableName of pattern.tables) {
-          const table = schema.tables.find(t => t.name === tableName);
-          if (!table) continue;
-
-          for (const column of pattern.whereColumns) {
-            if (table.columns.find(c => c.name === column) && !this.hasIndexOnColumn(table, column)) {
+    for (const [column, count] of columnUsage.entries()) {
+      if (count >= 2) { // Used in 2+ queries
+        // Find which table has this column
+        for (const table of schema.tables) {
+          if (table.columns.some(c => c.name === column)) {
+            const hasIndex = table.indexes.some(idx => idx.columns.includes(column));
+            if (!hasIndex) {
               recommendations.push({
                 tableName: table.name,
                 columns: [column],
                 type: 'btree',
-                reason: `Frequently queried column (${pattern.frequency} times)`,
-                priority: pattern.frequency >= 3 ? 'high' : 'medium',
-                estimatedImpact: Math.min(95, 50 + pattern.frequency * 10),
-                usageCount: pattern.frequency,
-                createStatement: `CREATE INDEX idx_${table.name}_${column} ON ${table.name}(${column})`
+                reason: `Frequently used in queries (${count} times)`,
+                priority: count >= 5 ? 'high' : 'medium',
+                estimatedImpact: Math.min(90, 50 + count * 5),
+                usageCount: count,
+                createStatement: this.generateCreateIndexSQL(table.name, [column])
               });
             }
           }
@@ -455,10 +336,7 @@ export class IndexAdvisor implements IIndexAdvisor {
       }
     }
 
-    return {
-      patterns,
-      recommendations: this.deduplicateRecommendations(recommendations)
-    };
+    return { patterns, recommendations };
   }
 
   /**
@@ -466,60 +344,58 @@ export class IndexAdvisor implements IIndexAdvisor {
    */
   async findRedundantIndexes(
     schema: DatabaseSchema
-  ): Promise<{ redundantIndexes: IndexUsageStats[]; potentialSavings: string }> {
+  ): Promise<{
+    redundantIndexes: IndexUsageStats[];
+    potentialSavings: string;
+  }> {
     const redundantIndexes: IndexUsageStats[] = [];
-    let totalSavingsBytes = 0;
 
     for (const table of schema.tables) {
-      const indexes = table.indexes || [];
+      // Sort indexes by column count (longer first)
+      const sortedIndexes = [...table.indexes].sort((a, b) => b.columns.length - a.columns.length);
 
-      for (let i = 0; i < indexes.length; i++) {
-        const idx1 = indexes[i];
-
-        for (let j = i + 1; j < indexes.length; j++) {
-          const idx2 = indexes[j];
-
-          // Check if idx2 is redundant with idx1 (idx2 came later)
-          if (this.isIndexRedundant(idx2.columns, idx1.columns)) {
-            const estimatedSize = this.estimateIndexSize(table, idx2.columns);
-            totalSavingsBytes += estimatedSize;
-
+      for (let i = 0; i < sortedIndexes.length; i++) {
+        const currentIndex = sortedIndexes[i];
+        
+        for (let j = i + 1; j < sortedIndexes.length; j++) {
+          const otherIndex = sortedIndexes[j];
+          
+          // Check if otherIndex is a prefix of currentIndex
+          if (this.isIndexPrefix(otherIndex.columns, currentIndex.columns)) {
             redundantIndexes.push({
-              indexName: idx2.name,
+              indexName: otherIndex.name,
               table: table.name,
-              columns: idx2.columns,
+              columns: otherIndex.columns,
               usageCount: 0,
-              selectivity: 0.5,
+              selectivity: 0,
               cardinality: 0,
               isRedundant: true,
-              redundantWith: idx1.name
-            });
-          }
-          // Also check if idx1 is redundant with idx2 (for composite index cases)
-          else if (this.isIndexRedundant(idx1.columns, idx2.columns)) {
-            const estimatedSize = this.estimateIndexSize(table, idx1.columns);
-            totalSavingsBytes += estimatedSize;
-
-            redundantIndexes.push({
-              indexName: idx1.name,
-              table: table.name,
-              columns: idx1.columns,
-              usageCount: 0,
-              selectivity: 0.5,
-              cardinality: 0,
-              isRedundant: true,
-              redundantWith: idx2.name
+              redundantWith: currentIndex.name
             });
           }
         }
       }
     }
 
-    const savingsMB = (totalSavingsBytes / (1024 * 1024)).toFixed(2);
-    return {
-      redundantIndexes,
-      potentialSavings: `${savingsMB} MB`
-    };
+    // Estimate space savings
+    const avgIndexSize = 1024 * 1024; // 1MB per index (rough estimate)
+    const totalSavings = redundantIndexes.length * avgIndexSize;
+    const potentialSavings = this.formatBytes(totalSavings);
+
+    return { redundantIndexes, potentialSavings };
+  }
+
+  /**
+   * Check if columns1 is a prefix of columns2
+   */
+  private isIndexPrefix(columns1: string[], columns2: string[]): boolean {
+    if (columns1.length >= columns2.length) return false;
+    
+    for (let i = 0; i < columns1.length; i++) {
+      if (columns1[i] !== columns2[i]) return false;
+    }
+    
+    return true;
   }
 
   /**
@@ -527,24 +403,22 @@ export class IndexAdvisor implements IIndexAdvisor {
    */
   async findUnusedIndexes(
     _schema: DatabaseSchema,
-    usageStats: IndexUsageStats[] = []
+    usageStats?: IndexUsageStats[]
   ): Promise<IndexUsageStats[]> {
-    const unused: IndexUsageStats[] = [];
-    const recentThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours
+    const unusedIndexes: IndexUsageStats[] = [];
 
-    for (const stats of usageStats) {
-      // Don't flag as unused if used recently (within 24 hours)
-      if (stats.lastUsed && stats.lastUsed > recentThreshold) {
-        continue;
-      }
+    // If no usage stats provided, return empty (can't determine without actual usage data)
+    if (!usageStats) {
+      return unusedIndexes;
+    }
 
-      // Only flag as unused if usage count is zero AND hasn't been used recently
-      if (stats.usageCount === 0 && (!stats.lastUsed || stats.lastUsed <= recentThreshold)) {
-        unused.push(stats);
+    for (const stat of usageStats) {
+      if (stat.usageCount === 0 && stat.indexName !== 'PRIMARY') {
+        unusedIndexes.push(stat);
       }
     }
 
-    return unused;
+    return unusedIndexes;
   }
 
   /**
@@ -552,7 +426,8 @@ export class IndexAdvisor implements IIndexAdvisor {
    */
   async estimateIndexImpact(
     recommendation: IndexRecommendation,
-    schema: DatabaseSchema
+    schema: DatabaseSchema,
+    sampleQueries?: string[]
   ): Promise<{
     improvementPercent: number;
     diskSpaceRequired: number;
@@ -568,29 +443,35 @@ export class IndexAdvisor implements IIndexAdvisor {
       };
     }
 
-    // Estimate improvement based on table size and selectivity
-    const rowCount = table.rowCount || 1000;
-    let improvementPercent = recommendation.estimatedImpact;
-
-    // Adjust based on table size
-    if (rowCount > 100000) {
-      improvementPercent = Math.min(95, improvementPercent + 10);
-    } else if (rowCount < 1000) {
-      improvementPercent = Math.max(20, improvementPercent - 20);
+    // Estimate improvement based on table size and index selectivity
+    let improvementPercent = recommendation.estimatedImpact || 50;
+    
+    if (sampleQueries && sampleQueries.length > 0) {
+      // Count queries that would benefit
+      let benefitingQueries = 0;
+      for (const query of sampleQueries) {
+        const pattern = this.parseQuery(query);
+        const wouldBenefit = recommendation.columns.some(col =>
+          pattern.whereColumns.includes(col) || pattern.joinColumns.includes(col)
+        );
+        if (wouldBenefit) benefitingQueries++;
+      }
+      improvementPercent = (benefitingQueries / sampleQueries.length) * 100;
     }
 
-    // Estimate disk space (rough estimate)
-    const diskSpaceRequired = this.estimateIndexSize(table, recommendation.columns);
+    // Estimate disk space (rough calculation)
+    const rowCount = table.rowCount || 1000;
+    const bytesPerEntry = 16; // Rough average for B-tree index
+    const diskSpaceRequired = rowCount * bytesPerEntry * recommendation.columns.length;
 
-    // Maintenance overhead
-    const overhead = recommendation.columns.length > 2
-      ? 'High - composite index will slow INSERT/UPDATE operations'
-      : 'Low - single-column index has minimal INSERT/UPDATE impact';
+    // Estimate maintenance overhead
+    const maintenanceOverhead = recommendation.columns.length === 1 ? 'Low' : 
+                                recommendation.columns.length === 2 ? 'Medium' : 'High';
 
     return {
       improvementPercent: Math.round(improvementPercent),
       diskSpaceRequired,
-      maintenanceOverhead: overhead
+      maintenanceOverhead
     };
   }
 
@@ -600,117 +481,63 @@ export class IndexAdvisor implements IIndexAdvisor {
   async generateOptimalIndexSet(
     queries: string[],
     schema: DatabaseSchema,
-    maxIndexes?: number
+    maxIndexes: number = 10
   ): Promise<IndexRecommendation[]> {
-    const allRecommendations: IndexRecommendation[] = [];
-
     // Analyze query patterns
     const { recommendations } = await this.analyzeQueryPatterns(queries, schema);
-    allRecommendations.push(...recommendations);
 
-    // Analyze individual queries
-    for (const query of queries) {
-      const queryRecs = await this.analyzeQuery(query, schema);
-      allRecommendations.push(...queryRecs);
-    }
-
-    // Deduplicate and sort by priority and impact
-    const deduplicated = this.deduplicateRecommendations(allRecommendations);
-
-    // Sort by usage frequency and estimated impact
-    const sorted = deduplicated.sort((a, b) => {
-      const scoreA = (a.usageCount || 1) * a.estimatedImpact;
-      const scoreB = (b.usageCount || 1) * b.estimatedImpact;
+    // Sort by impact (priority + usage count)
+    recommendations.sort((a, b) => {
+      const scoreA = this.calculateIndexScore(a);
+      const scoreB = this.calculateIndexScore(b);
       return scoreB - scoreA;
     });
 
-    // Limit to maxIndexes if specified
-    if (maxIndexes) {
-      return sorted.slice(0, maxIndexes);
-    }
-
-    return sorted;
+    // Take top N recommendations
+    return recommendations.slice(0, maxIndexes);
   }
 
-  // Helper methods
-
-  private detectForeignKeyColumns(table: TableSchema): string[] {
-    const fkColumns: string[] = [];
-
-    // Check constraints for foreign keys
-    if (table.constraints) {
-      for (const constraint of table.constraints) {
-        if (constraint.type === 'FOREIGN KEY' && constraint.columns) {
-          fkColumns.push(...constraint.columns);
-        }
-      }
+  /**
+   * Calculate index score for prioritization
+   */
+  private calculateIndexScore(recommendation: IndexRecommendation): number {
+    let score = recommendation.estimatedImpact || 50;
+    
+    // Priority bonus
+    if (recommendation.priority === 'high') score += 30;
+    else if (recommendation.priority === 'medium') score += 15;
+    
+    // Usage count bonus
+    if (recommendation.usageCount) {
+      score += Math.min(20, recommendation.usageCount * 2);
+    }
+    
+    // Single-column indexes score higher (easier to maintain)
+    if (recommendation.columns.length === 1) {
+      score += 10;
     }
 
-    // Also check for common naming patterns (id suffix)
-    for (const col of table.columns) {
-      if (col.name.endsWith('_id') && col.name !== 'id' && !fkColumns.includes(col.name)) {
-        fkColumns.push(col.name);
-      }
-    }
-
-    return fkColumns;
+    return score;
   }
 
-  private hasIndexOnColumn(table: TableSchema, columnName: string): boolean {
-    if (!table.indexes) return false;
-
-    return table.indexes.some(idx =>
-      idx.columns.includes(columnName) ||
-      (idx.columns.length === 1 && idx.columns[0] === columnName)
-    );
+  /**
+   * Generate CREATE INDEX SQL statement
+   */
+  private generateCreateIndexSQL(tableName: string, columns: string[]): string {
+    const indexName = `idx_${tableName}_${columns.join('_')}`;
+    return `CREATE INDEX ${indexName} ON ${tableName}(${columns.join(', ')})`;
   }
 
-  private isIndexRedundant(columns1: string[], columns2: string[]): boolean {
-    // An index is redundant if:
-    // 1. It's identical to another index (same columns in same order)
-    // 2. It's a prefix of another index (covered by the other index)
-
-    // Check if identical
-    if (columns1.length === columns2.length) {
-      return columns1.every((col, i) => col === columns2[i]);
-    }
-
-    // Check if columns1 is a prefix of columns2
-    if (columns1.length < columns2.length) {
-      for (let i = 0; i < columns1.length; i++) {
-        if (columns1[i] !== columns2[i]) return false;
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  private estimateIndexSize(table: TableSchema, columns: string[]): number {
-    const rowCount = table.rowCount || 1000;
-    const avgColumnSize = 50; // bytes
-    const indexOverhead = 10; // bytes per row
-
-    return columns.length * avgColumnSize * rowCount + (indexOverhead * rowCount);
-  }
-
-  private deduplicateRecommendations(recommendations: IndexRecommendation[]): IndexRecommendation[] {
-    const seen = new Map<string, IndexRecommendation>();
-
-    for (const rec of recommendations) {
-      const key = `${rec.tableName}_${rec.columns.sort().join('_')}`;
-
-      if (!seen.has(key)) {
-        seen.set(key, rec);
-      } else {
-        // Keep the one with higher impact
-        const existing = seen.get(key)!;
-        if (rec.estimatedImpact > existing.estimatedImpact) {
-          seen.set(key, rec);
-        }
-      }
-    }
-
-    return Array.from(seen.values());
+  /**
+   * Format bytes to human-readable string
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   }
 }

@@ -56,3 +56,8 @@ secrets.json
 
 # Test databases
 test-databases/
+
+# devibe/unvibe directories
+# These directories contain backups and temporary files from devibe
+.devibe/
+.unvibe/

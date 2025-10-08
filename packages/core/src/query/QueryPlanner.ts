@@ -1,8 +1,11 @@
 /**
- * QueryPlanner Implementation
+ * QueryPlanner - Analyze and optimize database query execution plans
  *
- * Analyzes database query execution plans to identify performance issues
- * and optimization opportunities.
+ * Features:
+ * - Parse EXPLAIN output from MySQL, PostgreSQL, MSSQL
+ * - Detect performance issues (full table scans, missing indexes, filesorts)
+ * - Generate optimization recommendations
+ * - Compare query plans
  */
 
 import {
@@ -11,6 +14,7 @@ import {
   QueryCostEstimate,
   QueryPerformanceMetrics,
   PerformanceSeverity,
+  QueryWarning,
   DatabaseType
 } from '@aidb/contracts';
 
@@ -20,84 +24,48 @@ export class QueryPlanner implements IQueryPlanner {
    */
   async getExecutionPlan(
     query: string,
-    _databaseType: DatabaseType
+    databaseType: DatabaseType
   ): Promise<QueryPlan> {
-    // In a real implementation, this would execute EXPLAIN via database adapter
-    // For now, return a basic plan structure
+    // This would normally execute EXPLAIN on the database
+    // For now, we'll simulate based on query structure
+    const estimate = await this.estimateCost(query, databaseType);
+    
     return {
       originalQuery: query,
-      estimatedCost: this.estimateBasicCost(query),
+      estimatedCost: estimate.totalCost,
       usedIndexes: [],
       suggestedIndexes: [],
       warnings: [],
       joinOrder: [],
-      executionStrategy: this.detectStrategy(query),
+      executionStrategy: 'table-scan',
       explainOutput: {}
-    };
-  }
-
-  /**
-   * Analyze query performance
-   */
-  analyzePerformance(plan: QueryPlan): QueryPerformanceMetrics {
-    let fullTableScans = 0;
-    let missingIndexes = 0;
-    let temporaryTables = 0;
-    let filesorts = 0;
-
-    // Count issues from warnings
-    plan.warnings.forEach(warning => {
-      if (warning.code === 'FULL_TABLE_SCAN' || warning.message.toLowerCase().includes('full table scan')) {
-        fullTableScans++;
-      }
-      if (warning.code === 'MISSING_INDEX' || warning.message.toLowerCase().includes('missing index')) {
-        missingIndexes++;
-      }
-      if (warning.message.toLowerCase().includes('temporary table')) {
-        temporaryTables++;
-      }
-      if (warning.code === 'FILESORT' || warning.message.toLowerCase().includes('filesort')) {
-        filesorts++;
-      }
-    });
-
-    // Also count from suggested indexes
-    missingIndexes += plan.suggestedIndexes.length;
-
-    const estimatedCost = plan.estimatedCost || 0;
-    const estimatedRows = this.extractEstimatedRows(plan);
-
-    const severity = this.calculateSeverity(
-      fullTableScans,
-      missingIndexes,
-      temporaryTables,
-      filesorts,
-      estimatedCost
-    );
-
-    return {
-      fullTableScans,
-      missingIndexes,
-      temporaryTables,
-      filesorts,
-      estimatedCost,
-      estimatedRows,
-      severity
     };
   }
 
   /**
    * Parse EXPLAIN output from database
    */
-  parseExplain(explainOutput: any, databaseType: DatabaseType): QueryPlan {
-    if (databaseType === DatabaseType.MySQL) {
+  parseExplain(
+    explainOutput: any,
+    databaseType: DatabaseType
+  ): QueryPlan {
+    switch (databaseType) {
+      case DatabaseType.MySQL:
       return this.parseMySQLExplain(explainOutput);
-    } else if (databaseType === DatabaseType.PostgreSQL) {
+      case DatabaseType.PostgreSQL:
       return this.parsePostgreSQLExplain(explainOutput);
+      case DatabaseType.MSSQL:
+        return this.parseMSSQLExplain(explainOutput);
+      default:
+        throw new Error(`Unsupported database type: ${databaseType}`);
     }
+  }
 
-    // Default fallback
-    return {
+  /**
+   * Parse MySQL EXPLAIN output
+   */
+  private parseMySQLExplain(explainOutput: any[]): QueryPlan {
+    const plan: QueryPlan = {
       originalQuery: '',
       estimatedCost: 0,
       usedIndexes: [],
@@ -107,6 +75,222 @@ export class QueryPlanner implements IQueryPlanner {
       executionStrategy: 'table-scan',
       explainOutput
     };
+
+    let totalCost = 0;
+
+    for (const row of explainOutput) {
+      // Calculate cost based on rows and type
+      const rowCost = this.calculateMySQLRowCost(row);
+      totalCost += rowCost;
+
+      // Detect used indexes
+      if (row.key) {
+        plan.usedIndexes.push(row.key);
+        plan.executionStrategy = 'index-scan';
+      }
+
+      // Detect full table scan
+      if (row.type === 'ALL') {
+        plan.warnings.push({
+          severity: 'warning',
+          code: 'FULL_TABLE_SCAN',
+          message: `Full table scan on ${row.table}`,
+          suggestion: `Consider adding an index to improve performance`,
+          affectedTable: row.table
+        });
+      }
+
+      // Detect filesort
+      if (row.Extra && row.Extra.includes('Using filesort')) {
+        plan.warnings.push({
+          severity: 'warning',
+          code: 'FILESORT',
+          message: `Using filesort on ${row.table}`,
+          suggestion: `Consider adding an index on ORDER BY columns`,
+          affectedTable: row.table
+        });
+      }
+
+      // Detect temporary table
+      if (row.Extra && row.Extra.includes('Using temporary')) {
+        plan.warnings.push({
+          severity: 'warning',
+          code: 'TEMPORARY_TABLE',
+          message: `Using temporary table for ${row.table}`,
+          suggestion: `Consider optimizing query or adding indexes`,
+          affectedTable: row.table
+        });
+      }
+    }
+
+    plan.estimatedCost = totalCost;
+    return plan;
+  }
+
+  /**
+   * Calculate cost for MySQL EXPLAIN row
+   */
+  private calculateMySQLRowCost(row: any): number {
+    const rows = row.rows || 1;
+    const typeCost = {
+      'const': 1,
+      'eq_ref': 1,
+      'ref': 10,
+      'range': 100,
+      'index': rows,
+      'ALL': rows * 2
+    };
+
+    return typeCost[row.type as keyof typeof typeCost] || rows;
+  }
+
+  /**
+   * Parse PostgreSQL EXPLAIN output (JSON format)
+   */
+  private parsePostgreSQLExplain(explainOutput: any[]): QueryPlan {
+    const plan: QueryPlan = {
+      originalQuery: '',
+      estimatedCost: 0,
+      usedIndexes: [],
+      suggestedIndexes: [],
+      warnings: [],
+      joinOrder: [],
+      executionStrategy: 'table-scan',
+      explainOutput
+    };
+
+    if (explainOutput.length > 0 && explainOutput[0].Plan) {
+      const pgPlan = explainOutput[0].Plan;
+      this.parsePostgreSQLNode(pgPlan, plan);
+    }
+
+      return plan;
+    }
+
+  /**
+   * Recursively parse PostgreSQL plan node
+   */
+  private parsePostgreSQLNode(node: any, plan: QueryPlan): void {
+    // Extract cost
+    if (node['Total Cost']) {
+      plan.estimatedCost = Math.max(plan.estimatedCost, node['Total Cost']);
+    }
+
+    // Extract index usage
+    if (node['Index Name']) {
+      plan.usedIndexes.push(node['Index Name']);
+      plan.executionStrategy = 'index-scan';
+    }
+
+    // Detect sequential scan (table scan)
+    if (node['Node Type'] === 'Seq Scan') {
+      plan.warnings.push({
+        severity: 'warning',
+        code: 'FULL_TABLE_SCAN',
+        message: `Sequential scan on ${node['Relation Name']}`,
+        suggestion: `Consider adding an index`,
+        affectedTable: node['Relation Name']
+      });
+      plan.executionStrategy = 'table-scan';
+    }
+
+    // Detect hash join
+    if (node['Node Type'] === 'Hash Join') {
+      plan.executionStrategy = 'hash-join';
+    }
+
+    // Detect merge join
+    if (node['Node Type'] === 'Merge Join') {
+      plan.executionStrategy = 'merge-join';
+    }
+
+    // Detect nested loop
+    if (node['Node Type'] === 'Nested Loop') {
+      plan.executionStrategy = 'nested-loop';
+    }
+
+    // Recursively process child nodes
+    if (node.Plans) {
+      for (const childNode of node.Plans) {
+        this.parsePostgreSQLNode(childNode, plan);
+      }
+    }
+  }
+
+  /**
+   * Parse MSSQL execution plan
+   */
+  private parseMSSQLExplain(explainOutput: any): QueryPlan {
+    const plan: QueryPlan = {
+      originalQuery: explainOutput.StatementText || '',
+      estimatedCost: explainOutput.EstimatedTotalCost || 0,
+      usedIndexes: explainOutput.IndexSeeks || [],
+      suggestedIndexes: [],
+      warnings: [],
+      joinOrder: [],
+      executionStrategy: 'table-scan',
+      explainOutput
+    };
+
+    // Detect table scans
+    if (explainOutput.TableScans && explainOutput.TableScans.length > 0) {
+      for (const table of explainOutput.TableScans) {
+        plan.warnings.push({
+          severity: 'warning',
+          code: 'FULL_TABLE_SCAN',
+          message: `Table scan on ${table}`,
+          suggestion: `Consider adding an index`,
+          affectedTable: table
+        });
+      }
+    }
+
+    return plan;
+  }
+
+  /**
+   * Analyze query performance
+   */
+  analyzePerformance(plan: QueryPlan): QueryPerformanceMetrics {
+    const metrics: QueryPerformanceMetrics = {
+      fullTableScans: 0,
+      missingIndexes: 0,
+      temporaryTables: 0,
+      filesorts: 0,
+      estimatedCost: plan.estimatedCost,
+      estimatedRows: 0,
+      severity: PerformanceSeverity.OPTIMAL
+    };
+
+    // Count issues
+    for (const warning of plan.warnings) {
+      switch (warning.code) {
+        case 'FULL_TABLE_SCAN':
+          metrics.fullTableScans++;
+          break;
+        case 'FILESORT':
+          metrics.filesorts++;
+          break;
+        case 'TEMPORARY_TABLE':
+          metrics.temporaryTables++;
+          break;
+      }
+    }
+
+    metrics.missingIndexes = plan.suggestedIndexes.length;
+
+    // Determine severity
+    if (metrics.fullTableScans >= 2 || metrics.estimatedCost > 50000) {
+      metrics.severity = PerformanceSeverity.CRITICAL;
+    } else if (metrics.fullTableScans >= 1 || metrics.filesorts >= 1 || metrics.estimatedCost > 5000) {
+      metrics.severity = PerformanceSeverity.WARNING;
+    } else if (metrics.estimatedCost > 100) {
+      metrics.severity = PerformanceSeverity.GOOD;
+    } else {
+      metrics.severity = PerformanceSeverity.OPTIMAL;
+    }
+
+    return metrics;
   }
 
   /**
@@ -115,61 +299,109 @@ export class QueryPlanner implements IQueryPlanner {
   generateRecommendations(plan: QueryPlan): string[] {
     const recommendations: string[] = [];
 
-    // Check for SELECT *
-    if (plan.originalQuery && plan.originalQuery.includes('SELECT *')) {
-      recommendations.push('Avoid SELECT * - specify only needed columns to reduce data transfer');
-    }
-
-    // Check for high cost queries without LIMIT
-    if (plan.estimatedCost > 5000 && !plan.originalQuery.includes('LIMIT')) {
-      recommendations.push('Consider adding LIMIT clause to reduce result set size');
-    }
-
-    // Check for missing indexes from warnings
-    plan.warnings.forEach(warning => {
-      if (warning.code === 'FULL_TABLE_SCAN') {
-        recommendations.push(`Add index on ${warning.affectedTable || 'table'} to avoid full table scan`);
+    // Group warnings by type
+    const warningsByCode = new Map<string, QueryWarning[]>();
+    for (const warning of plan.warnings) {
+      if (!warningsByCode.has(warning.code)) {
+        warningsByCode.set(warning.code, []);
       }
-    });
-
-    // Check for suggested indexes
-    plan.suggestedIndexes.forEach(index => {
-      recommendations.push(
-        `Create index on ${index.tableName}(${index.columns.join(', ')}) - ${index.reason}`
-      );
-    });
-
-    // Check for subqueries that could be JOINs
-    if (plan.originalQuery && plan.originalQuery.includes('IN (SELECT')) {
-      recommendations.push('Consider rewriting subquery as JOIN for better performance');
+      warningsByCode.get(warning.code)!.push(warning);
     }
 
-    // Check for filesorts
-    const hasFilesort = plan.warnings.some(w =>
-      w.code === 'FILESORT' || w.message.toLowerCase().includes('filesort')
-    );
-    if (hasFilesort) {
-      recommendations.push('Add index on ORDER BY columns to avoid filesort');
+    // Generate recommendations based on warnings
+    if (warningsByCode.has('FULL_TABLE_SCAN')) {
+      const scans = warningsByCode.get('FULL_TABLE_SCAN')!;
+      const tables = scans.map(w => w.affectedTable).join(', ');
+      recommendations.push(
+        `Add indexes to tables with full table scans: ${tables}`
+      );
+      recommendations.push(
+        `Full table scans detected on ${scans.length} table(s). Consider adding WHERE clause filters or indexes.`
+      );
+    }
+
+    if (warningsByCode.has('FILESORT')) {
+      recommendations.push(
+        `Add composite index including ORDER BY columns to avoid filesort operations`
+      );
+      recommendations.push(
+        `Consider using covering indexes that include both WHERE and ORDER BY columns`
+      );
+    }
+
+    if (warningsByCode.has('TEMPORARY_TABLE')) {
+      recommendations.push(
+        `Optimize query to avoid temporary tables - consider removing DISTINCT or GROUP BY if not needed`
+      );
+    }
+
+    // Index usage recommendations
+    if (plan.usedIndexes.length === 0 && plan.warnings.length > 0) {
+      recommendations.push(
+        `No indexes are being used. Review table structure and add appropriate indexes.`
+      );
+    }
+
+    // Suggest query rewrite for high cost
+    if (plan.estimatedCost > 10000) {
+      recommendations.push(
+        `High query cost detected (${plan.estimatedCost.toFixed(0)}). Consider breaking down into smaller queries or adding aggressive WHERE filters.`
+      );
+    }
+
+    // Index suggestions
+    for (const suggestion of plan.suggestedIndexes) {
+      recommendations.push(
+        `Create ${suggestion.type} index on ${suggestion.tableName}(${suggestion.columns.join(', ')}): ${suggestion.reason}`
+      );
     }
 
     return recommendations;
   }
 
   /**
-   * Estimate query cost
+   * Estimate query cost based on structure
    */
   async estimateCost(
     query: string,
     _databaseType: DatabaseType
   ): Promise<QueryCostEstimate> {
-    const totalCost = this.estimateBasicCost(query);
-    const startupCost = totalCost * 0.1; // Rough estimate
-    const estimatedRows = this.estimateRows(query);
+    // Simple heuristic-based estimation
+    const queryLower = query.toLowerCase();
+    
+    let baseCost = 10;
+    let estimatedRows = 100;
+
+    // Check for joins
+    const joinCount = (queryLower.match(/\sjoin\s/g) || []).length;
+    baseCost += joinCount * 1000;
+    estimatedRows *= Math.pow(10, joinCount);
+
+    // Check for WHERE clause
+    if (!queryLower.includes('where')) {
+      baseCost *= 10; // No filter = expensive
+      estimatedRows *= 10;
+    }
+
+    // Check for aggregation
+    if (queryLower.includes('group by') || queryLower.includes('distinct')) {
+      baseCost *= 5;
+    }
+
+    // Check for ORDER BY
+    if (queryLower.includes('order by')) {
+      baseCost *= 2;
+    }
+
+    // Check for subqueries
+    const subqueryCount = (queryLower.match(/\(\s*select/g) || []).length;
+    baseCost += subqueryCount * 500;
 
     return {
-      totalCost,
-      startupCost,
-      estimatedRows
+      totalCost: baseCost,
+      startupCost: baseCost * 0.1,
+      estimatedRows,
+      estimatedWidth: 100
     };
   }
 
@@ -184,290 +416,39 @@ export class QueryPlanner implements IQueryPlanner {
     improvements: string[];
     costDifference: number;
   } {
-    const cost1 = plan1.estimatedCost;
-    const cost2 = plan2.estimatedCost;
-    const costDifference = Math.abs(cost1 - cost2);
-
-    const betterPlan = cost1 < cost2 ? plan1 : plan2;
-    const worsePlan = cost1 < cost2 ? plan2 : plan1;
+    const costDiff = Math.abs(plan1.estimatedCost - plan2.estimatedCost);
+    const betterPlan = plan1.estimatedCost < plan2.estimatedCost ? plan1 : plan2;
+    const worsePlan = betterPlan === plan1 ? plan2 : plan1;
 
     const improvements: string[] = [];
 
-    // Compare indexes used
+    // Compare costs
+    if (costDiff > 0) {
+      const improvement = ((costDiff / worsePlan.estimatedCost) * 100).toFixed(1);
+      improvements.push(`${improvement}% cost reduction (${worsePlan.estimatedCost.toFixed(0)} → ${betterPlan.estimatedCost.toFixed(0)})`);
+    }
+
+    // Compare index usage
     if (betterPlan.usedIndexes.length > worsePlan.usedIndexes.length) {
-      improvements.push(
-        `Uses ${betterPlan.usedIndexes.length - worsePlan.usedIndexes.length} more indexes: ${betterPlan.usedIndexes.join(', ')}`
-      );
+      const additionalIndexes = betterPlan.usedIndexes.length - worsePlan.usedIndexes.length;
+      improvements.push(`Uses ${additionalIndexes} more index(es)`);
     }
 
     // Compare warnings
     if (betterPlan.warnings.length < worsePlan.warnings.length) {
-      improvements.push(
-        `Reduces performance warnings from ${worsePlan.warnings.length} to ${betterPlan.warnings.length}`
-      );
+      const fewerWarnings = worsePlan.warnings.length - betterPlan.warnings.length;
+      improvements.push(`${fewerWarnings} fewer performance warning(s)`);
     }
 
     // Compare execution strategy
     if (betterPlan.executionStrategy !== worsePlan.executionStrategy) {
-      improvements.push(
-        `Better execution strategy: ${betterPlan.executionStrategy} vs ${worsePlan.executionStrategy}`
-      );
-    }
-
-    // Cost improvement
-    if (costDifference > 0) {
-      const percentImprovement = ((costDifference / Math.max(cost1, cost2)) * 100).toFixed(1);
-      improvements.push(`${percentImprovement}% cost reduction`);
+      improvements.push(`Better execution strategy: ${betterPlan.executionStrategy}`);
     }
 
     return {
       betterPlan,
       improvements,
-      costDifference
+      costDifference: costDiff
     };
-  }
-
-  // Private helper methods
-
-  private parseMySQLExplain(explainOutput: any[]): QueryPlan {
-    const plan: QueryPlan = {
-      originalQuery: '',
-      estimatedCost: 0,
-      usedIndexes: [],
-      suggestedIndexes: [],
-      warnings: [],
-      joinOrder: [],
-      executionStrategy: 'table-scan',
-      explainOutput
-    };
-
-    if (!Array.isArray(explainOutput)) {
-      return plan;
-    }
-
-    let totalRows = 0;
-
-    explainOutput.forEach((row) => {
-      const type = row.type || row.access_type;
-      const table = row.table;
-      const key = row.key;
-      const rows = row.rows || 0;
-
-      totalRows += rows;
-
-      // Track used indexes
-      if (key && key !== 'NULL' && key !== null) {
-        if (!plan.usedIndexes.includes(key)) {
-          plan.usedIndexes.push(key);
-        }
-      }
-
-      // Detect full table scans
-      if (type === 'ALL') {
-        plan.warnings.push({
-          severity: 'warning',
-          code: 'FULL_TABLE_SCAN',
-          message: `Full table scan on ${table}`,
-          suggestion: 'Add index on frequently queried columns',
-          affectedTable: table
-        });
-      }
-
-      // Detect filesort
-      if (row.Extra && row.Extra.includes('Using filesort')) {
-        plan.warnings.push({
-          severity: 'warning',
-          code: 'FILESORT',
-          message: 'Using filesort - consider adding index on ORDER BY columns',
-          suggestion: 'Add index on ORDER BY columns'
-        });
-      }
-
-      // Detect temporary table
-      if (row.Extra && row.Extra.includes('Using temporary')) {
-        plan.warnings.push({
-          severity: 'warning',
-          code: 'TEMP_TABLE',
-          message: 'Using temporary table',
-          suggestion: 'Optimize query to avoid temporary tables'
-        });
-      }
-    });
-
-    plan.estimatedCost = totalRows;
-    plan.executionStrategy = this.determineStrategyFromExplain(explainOutput);
-
-    return plan;
-  }
-
-  private parsePostgreSQLExplain(explainOutput: any): QueryPlan {
-    const plan: QueryPlan = {
-      originalQuery: '',
-      estimatedCost: 0,
-      usedIndexes: [],
-      suggestedIndexes: [],
-      warnings: [],
-      joinOrder: [],
-      executionStrategy: 'table-scan',
-      explainOutput
-    };
-
-    if (!explainOutput || !explainOutput.Plan) {
-      return plan;
-    }
-
-    const pgPlan = explainOutput.Plan;
-
-    // Extract cost
-    plan.estimatedCost = pgPlan['Total Cost'] || 0;
-
-    // Extract index usage
-    if (pgPlan['Index Name']) {
-      plan.usedIndexes.push(pgPlan['Index Name']);
-    }
-
-    // Detect sequential scans
-    if (pgPlan['Node Type'] === 'Seq Scan') {
-      plan.warnings.push({
-        severity: 'warning',
-        code: 'FULL_TABLE_SCAN',
-        message: `Sequential scan on ${pgPlan['Relation Name']}`,
-        suggestion: 'Add index to improve performance',
-        affectedTable: pgPlan['Relation Name']
-      });
-    }
-
-    // Determine strategy
-    const nodeType = pgPlan['Node Type'];
-    if (nodeType === 'Index Scan' || nodeType === 'Index Only Scan') {
-      plan.executionStrategy = 'index-scan';
-    } else if (nodeType === 'Seq Scan') {
-      plan.executionStrategy = 'table-scan';
-    } else if (nodeType === 'Hash Join') {
-      plan.executionStrategy = 'hash-join';
-    } else if (nodeType === 'Merge Join') {
-      plan.executionStrategy = 'merge-join';
-    } else if (nodeType === 'Nested Loop') {
-      plan.executionStrategy = 'nested-loop';
-    }
-
-    return plan;
-  }
-
-  private calculateSeverity(
-    fullTableScans: number,
-    missingIndexes: number,
-    temporaryTables: number,
-    filesorts: number,
-    estimatedCost: number
-  ): PerformanceSeverity {
-    // Calculate total issues
-    const totalIssues = fullTableScans + missingIndexes + temporaryTables + filesorts;
-
-    // Critical: Multiple serious issues or very high cost
-    if (totalIssues >= 3 || estimatedCost > 50000 || fullTableScans >= 2) {
-      return PerformanceSeverity.CRITICAL;
-    }
-
-    // Warning: Some issues or moderate cost
-    if (totalIssues >= 1 || estimatedCost > 5000) {
-      return PerformanceSeverity.WARNING;
-    }
-
-    // Good: Minor issues or low cost
-    if (estimatedCost > 100 || missingIndexes > 0) {
-      return PerformanceSeverity.GOOD;
-    }
-
-    // Optimal: No issues and low cost
-    return PerformanceSeverity.OPTIMAL;
-  }
-
-  private extractEstimatedRows(plan: QueryPlan): number {
-    // Try to extract from explain output
-    if (Array.isArray(plan.explainOutput)) {
-      return plan.explainOutput.reduce((sum, row) => sum + (row.rows || 0), 0);
-    }
-
-    if (plan.explainOutput?.Plan?.['Plan Rows']) {
-      return plan.explainOutput.Plan['Plan Rows'];
-    }
-
-    // Fallback estimate based on cost
-    return Math.ceil(plan.estimatedCost / 10);
-  }
-
-  private estimateBasicCost(query: string): number {
-    let cost = 100; // Base cost
-
-    // Increase cost for JOINs
-    const joinCount = (query.match(/JOIN/gi) || []).length;
-    cost += joinCount * 500;
-
-    // Increase cost for subqueries
-    const subqueryCount = (query.match(/SELECT.*FROM.*\(SELECT/gi) || []).length;
-    cost += subqueryCount * 1000;
-
-    // Increase cost for ORDER BY without LIMIT
-    if (query.includes('ORDER BY') && !query.includes('LIMIT')) {
-      cost += 1000;
-    }
-
-    // Decrease cost for specific lookups (WHERE id = ?)
-    if (query.match(/WHERE\s+id\s*=/i)) {
-      cost = Math.min(cost, 10);
-    }
-
-    return cost;
-  }
-
-  private estimateRows(query: string): number {
-    // Simple heuristic based on query type
-    if (query.includes('WHERE id =')) {
-      return 1;
-    }
-
-    if (query.includes('LIMIT')) {
-      const match = query.match(/LIMIT\s+(\d+)/i);
-      if (match) {
-        return parseInt(match[1]);
-      }
-    }
-
-    if (query.includes('JOIN')) {
-      return 1000; // Assume moderate result set for joins
-    }
-
-    return 100; // Default estimate
-  }
-
-  private detectStrategy(query: string): any {
-    if (query.includes('WHERE id =')) {
-      return 'index-scan';
-    }
-
-    if (query.includes('JOIN')) {
-      return 'nested-loop';
-    }
-
-    return 'table-scan';
-  }
-
-  private determineStrategyFromExplain(explainOutput: any[]): any {
-    if (!explainOutput || explainOutput.length === 0) {
-      return 'table-scan';
-    }
-
-    const hasIndex = explainOutput.some(row => row.key && row.key !== 'NULL' && row.key !== null);
-    if (hasIndex) {
-      return 'index-scan';
-    }
-
-    const hasJoin = explainOutput.length > 1;
-    if (hasJoin) {
-      return 'nested-loop';
-    }
-
-    return 'table-scan';
   }
 }

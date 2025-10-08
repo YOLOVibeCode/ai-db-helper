@@ -5,8 +5,6 @@
     "lib": ["ES2022"],
     "declaration": true,
     "declarationMap": true,
-    "outDir": "./dist",
-    "rootDir": "./",
     "composite": true,
     "removeComments": true,
     "esModuleInterop": true,
@@ -28,13 +26,11 @@
     "alwaysStrict": true,
     "noImplicitAny": true
   },
-  "include": [
-    "packages/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "**/*.test.ts",
-    "test-harnesses"
+  "files": [],
+  "references": [
+    { "path": "./packages/contracts" },
+    { "path": "./packages/core" },
+    { "path": "./packages/adapters" },
+    { "path": "./packages/cli" }
   ]
 }

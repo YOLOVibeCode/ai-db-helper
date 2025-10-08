@@ -375,9 +375,10 @@ export class MySQLSchemaExtractor implements ISchemaExtractor {
    * Get row count for a table
    */
   async getTableRowCount(tableName: string): Promise<number> {
+    // Use backticks to escape table name (prevent SQL injection)
+    const escapedTableName = tableName.replace(/`/g, '``');
     const result = await this.adapter.executeQuery<any[]>(
-      `SELECT COUNT(*) as count FROM ??`,
-      [tableName]
+      `SELECT COUNT(*) as count FROM \`${escapedTableName}\``
     );
     return result[0].count;
   }
