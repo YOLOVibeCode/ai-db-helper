@@ -2,6 +2,8 @@
 
 > **AI-optimized database schema utility for intelligent database interaction**
 
+[![npm version](https://img.shields.io/npm/v/@rvegajr/aidb.svg)](https://www.npmjs.com/package/@rvegajr/aidb)
+[![npm downloads](https://img.shields.io/npm/dm/@rvegajr/aidb.svg)](https://www.npmjs.com/package/@rvegajr/aidb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
@@ -26,7 +28,7 @@ AI Database Helper (aidb) is a command-line utility that creates AI-optimized re
 ### Installation
 
 ```bash
-npm install -g @yolovibecode/aidb
+npm install -g @rvegajr/aidb
 ```
 
 ### Connect to a Database
