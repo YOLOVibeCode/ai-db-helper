@@ -19,7 +19,7 @@
   "license": "MIT",
   "dependencies": {
     "@aidb/contracts": "1.1.0",
-    "@azure/identity": "^4.0.0",
+    "@azure/identity": "^4.13.0",
     "fast-levenshtein": "^3.0.0",
     "graphlib": "^2.1.8",
     "pluralize": "^8.0.0",
