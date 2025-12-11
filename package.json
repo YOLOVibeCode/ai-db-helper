@@ -35,7 +35,10 @@
   "main": "./packages/core/dist/index.js",
   "types": "./packages/core/dist/index.d.ts",
   "files": [
-    "packages/*/dist",
+    "packages/contracts/dist/**/*",
+    "packages/core/dist/**/*",
+    "packages/adapters/dist/**/*",
+    "packages/cli/dist/**/*",
     "README.md",
     "LICENSE"
   ],

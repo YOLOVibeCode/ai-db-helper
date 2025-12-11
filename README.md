@@ -42,8 +42,17 @@ aidb connect logs --connection-string "mssql://sa:Password@host:1433/logs"
 # Or connect with individual parameters
 aidb connect mydb --type postgres --host localhost --database myapp
 
-# Connect to Azure SQL with managed identity
-aidb connect azure-prod --type azure-sql --auth managed-identity
+# Connect to Azure SQL with Azure AD authentication (MFA support)
+aidb connect azure-prod --type azure-sql --host myserver.database.windows.net --database mydb
+# Will prompt for Azure AD authentication via device code flow
+
+# Or use Azure CLI if already logged in
+aidb connect azure-prod --type azure-sql --host myserver.database.windows.net --database mydb --auth az-cli
+
+# Manage Azure AD authentication
+aidb auth login    # Sign in to Azure AD
+aidb auth list     # List cached accounts
+aidb auth logout   # Sign out
 ```
 
 ### Multi-Database Usage
