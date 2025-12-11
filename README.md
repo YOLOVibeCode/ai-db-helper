@@ -13,6 +13,11 @@ AI Database Helper (aidb) is a command-line utility that creates AI-optimized re
 ## Features
 
 - **Multi-Database Support**: MySQL, PostgreSQL, MSSQL, SQLite, MongoDB, DB2, Oracle, Azure SQL
+- **Azure SQL Authentication**: 🔐 **NEW!** Connect to Azure SQL databases with Azure AD authentication and MFA support
+  - Device code flow for MFA-compatible authentication (no app registration required)
+  - Azure CLI delegation for seamless developer experience
+  - Automatic token caching and refresh
+  - Multi-tenant support
 - **Multiple Simultaneous Databases**: Connect to multiple databases at once - AI has visibility across your entire data ecosystem
 - **Relationship Intelligence**: Automatic discovery of explicit and inferred relationships with multiplicity detection (1:1, 1:N, N:N)
 - **Query Execution**: Execute SQL queries directly via CLI with safety confirmations
@@ -42,17 +47,20 @@ aidb connect logs --connection-string "mssql://sa:Password@host:1433/logs"
 # Or connect with individual parameters
 aidb connect mydb --type postgres --host localhost --database myapp
 
-# Connect to Azure SQL with Azure AD authentication (MFA support)
+# 🔐 Connect to Azure SQL with Azure AD Authentication (MFA Support)
+# No app registration required - uses Azure CLI's public client ID
 aidb connect azure-prod --type azure-sql --host myserver.database.windows.net --database mydb
-# Will prompt for Azure AD authentication via device code flow
+# Will automatically prompt for Azure AD authentication via device code flow
+# Visit microsoft.com/devicelogin and enter the code shown
+# Supports MFA - works with any Azure AD tenant!
 
-# Or use Azure CLI if already logged in
+# Or use Azure CLI if already logged in (seamless!)
 aidb connect azure-prod --type azure-sql --host myserver.database.windows.net --database mydb --auth az-cli
 
 # Manage Azure AD authentication
-aidb auth login    # Sign in to Azure AD
-aidb auth list     # List cached accounts
-aidb auth logout   # Sign out
+aidb auth login    # Sign in to Azure AD (interactive device code flow)
+aidb auth list     # List all cached Azure accounts
+aidb auth logout   # Sign out and clear cached tokens
 ```
 
 ### Multi-Database Usage
@@ -260,6 +268,7 @@ aidb schema largedb --exclude-tables *_audit,sessions
 | IBM DB2       | 11.5+        | ✓                 | ✓             | ✓              |
 | Oracle        | 12c+         | ✓                 | ✓             | ✓              |
 | Azure SQL     | Latest       | ✓                 | ✓             | ✓              |
+|               |              | 🔐 Azure AD Auth  | MFA Support   | Token Caching  |
 
 ## Development
 
