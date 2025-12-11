@@ -269,6 +269,7 @@ aidb schema largedb --exclude-tables *_audit,sessions
 | Oracle        | 12c+         | ✓                 | ✓             | ✓              |
 | Azure SQL     | Latest       | ✓                 | ✓             | ✓              |
 |               |              | 🔐 Azure AD Auth  | MFA Support   | Token Caching  |
+|               |              | 🔐 Azure AD Auth  | MFA Support   | Token Caching  |
 
 ## Development
 
@@ -321,8 +322,14 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Roadmap
 
-### v1.0.1 (Current)
+### v1.1.0 (Current) 🔐
 - ✓ Multi-database support (8+ databases)
+- ✓ **Azure SQL Authentication with MFA Support**
+  - Device code flow for MFA-compatible authentication (Claude Code pattern)
+  - Azure CLI delegation for seamless developer experience
+  - Automatic token caching and refresh (~90 days)
+  - Multi-tenant support (works with any Azure AD tenant)
+  - No app registration required (uses Azure CLI's public client ID)
 - ✓ Relationship intelligence with multiplicity detection
 - ✓ Index advisory with comprehensive analysis
 - ✓ Connection string support for easy setup
@@ -331,7 +338,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - ✓ Multiple simultaneous database connections
 - ✓ AI-optimized output formats
 
-### v1.1 (Planned)
+### v1.2 (Planned)
 - Interactive schema browser (TUI)
 - Query history tracking
 - Schema comparison between databases
