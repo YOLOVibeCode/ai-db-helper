@@ -1,6 +1,6 @@
 {
   "name": "@rvegajr/aidb",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "AI-optimized database schema utility for intelligent database interaction",
   "keywords": [
     "database",
@@ -52,6 +52,7 @@
     "test:integration": "docker-compose -f test-harnesses/docker-compose.yml up -d && vitest run test-harnesses/integration",
     "test:integration:down": "docker-compose -f test-harnesses/docker-compose.yml down",
     "test:contracts": "vitest run test-harnesses/contract-tests",
+    "test:azure-sql": "vitest run test-harnesses/integration/azure-sql-connection.test.ts --reporter=verbose",
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",

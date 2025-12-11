@@ -33,6 +33,7 @@ export * from './query/ITransactionManager';
 
 // Security interfaces
 export * from './security/ICredentialVault';
+export * from './security/IAzureAuthProvider';
 
 // Rollback interfaces
 export * from './rollback/IRollbackManager';

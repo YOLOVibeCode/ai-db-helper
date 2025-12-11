@@ -1,6 +1,6 @@
 {
   "name": "@aidb/adapters",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Database-specific adapter implementations",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,8 +20,8 @@
   "author": "AI Database Helper Contributors",
   "license": "MIT",
   "dependencies": {
-    "@aidb/contracts": "1.0.0",
-    "@aidb/core": "1.0.0",
+    "@aidb/contracts": "1.1.0",
+    "@aidb/core": "1.1.0",
     "better-sqlite3": "^9.0.0",
     "mongodb": "^6.20.0",
     "mssql": "^10.0.4",

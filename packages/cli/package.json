@@ -1,6 +1,6 @@
 {
   "name": "@aidb/cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Command-line interface for AI Database Helper",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,9 +22,9 @@
   "author": "AI Database Helper Contributors",
   "license": "MIT",
   "dependencies": {
-    "@aidb/contracts": "1.0.0",
-    "@aidb/core": "1.0.0",
-    "@aidb/adapters": "1.0.0",
+    "@aidb/contracts": "1.1.0",
+    "@aidb/core": "1.1.0",
+    "@aidb/adapters": "1.1.0",
     "commander": "^11.0.0",
     "inquirer": "^9.0.0",
     "chalk": "^5.0.0",

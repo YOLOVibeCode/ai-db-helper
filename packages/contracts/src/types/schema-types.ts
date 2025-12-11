@@ -197,10 +197,26 @@ export interface SSLOptions {
 }
 
 export interface AzureAuthOptions {
-  method: 'managed-identity' | 'service-principal' | 'sql-auth';
-  tenantId?: string;
-  clientId?: string;
-  clientSecret?: string;
+  /**
+   * Authentication method
+   * @default 'auto' - tries cached token, then device code
+   */
+  method?: 'auto' | 'device-code' | 'az-cli' | 'service-principal' | 'managed-identity' | 'sql-auth';
+  
+  /**
+   * Azure AD Tenant ID or domain
+   * @example 'contoso.onmicrosoft.com' or 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+   * @default 'common' - allows any Azure AD tenant
+   */
+  tenant?: string;
+  
+  /**
+   * Service principal credentials (only for method: 'service-principal')
+   */
+  servicePrincipal?: {
+    clientId: string;
+    clientSecret: string;
+  };
 }
 
 export interface MongoConnectionOptions {

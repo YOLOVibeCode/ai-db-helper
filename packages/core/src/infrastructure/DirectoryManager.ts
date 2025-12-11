@@ -69,6 +69,20 @@ export class DirectoryManager {
   }
 
   /**
+   * Get the Azure authentication directory path
+   */
+  getAzureAuthPath(): string {
+    return path.join(this.getAidbPath(), 'azure');
+  }
+
+  /**
+   * Get the Azure token cache file path
+   */
+  getAzureTokenCachePath(): string {
+    return path.join(this.getAzureAuthPath(), 'tokens.json');
+  }
+
+  /**
    * Initialize the .aidb directory structure
    * Creates all necessary directories with proper permissions
    */
@@ -86,6 +100,7 @@ export class DirectoryManager {
     await this.ensureDirectoryExists(this.getRollbacksPath());
     await this.ensureDirectoryExists(this.getMetadataPath());
     await this.ensureDirectoryExists(this.getLogsPath());
+    await this.ensureDirectoryExists(this.getAzureAuthPath());
 
     // Create default config if it doesn't exist
     const configPath = this.getConfigPath();
@@ -127,7 +142,8 @@ export class DirectoryManager {
       this.getSchemasPath(),
       this.getRollbacksPath(),
       this.getMetadataPath(),
-      this.getLogsPath()
+      this.getLogsPath(),
+      this.getAzureAuthPath()
     ];
 
     for (const dir of requiredDirs) {

@@ -10,6 +10,7 @@ export * from './infrastructure/DirectoryManager';
 // Security
 export * from './security/EncryptionService';
 export * from './security/CredentialVault';
+export * from './security/AzureAuthProvider';
 
 // Cache
 export * from './cache/SchemaCache';

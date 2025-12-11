@@ -34,6 +34,8 @@ interface ConnectOptions {
   database?: string;
   user?: string;
   password?: string;
+  tenant?: string;
+  auth?: string;
 }
 
 export async function connectCommand(databaseName: string, options: ConnectOptions) {
@@ -51,7 +53,7 @@ export async function connectCommand(databaseName: string, options: ConnectOptio
     // Get or prompt for connection details
     const credentials = await getCredentials(databaseName, options);
 
-    // Prompt for master password
+    // Prompt for master password (only if storing credentials)
     const { masterPassword } = await inquirer.prompt([
       {
         type: 'password',
@@ -185,21 +187,44 @@ export async function connectCommand(databaseName: string, options: ConnectOptio
   }
 }
 
-async function getCredentials(databaseName: string, options: ConnectOptions): Promise<ConnectionCredentials> {
+async function getCredentials(
+  databaseName: string,
+  options: ConnectOptions
+): Promise<ConnectionCredentials> {
+  const dbType = (options.type || 'mysql') as DatabaseType;
+  const isAzureSQL = dbType === DatabaseType.AzureSQL;
+
   // If minimal required options provided (type, host, database), use them
   // For MongoDB, user is optional (no auth mode)
   if (options.type && options.host && options.database) {
-    return {
-      type: options.type as DatabaseType,
+    const credentials: ConnectionCredentials = {
+      type: dbType,
       host: options.host,
-      port: options.port ? parseInt(options.port) : getDefaultPort(options.type as DatabaseType),
-      database: options.database,
-      username: options.user,
-      password: options.password
+      port: options.port ? parseInt(options.port) : getDefaultPort(dbType),
+      database: options.database
     };
+
+    // Handle Azure SQL authentication
+    if (isAzureSQL) {
+      const authMethod = options.auth || 'auto';
+      if (authMethod !== 'sql-auth') {
+        credentials.azureAuth = {
+          method: authMethod as any,
+          tenant: options.tenant
+        };
+      } else {
+        credentials.username = options.user;
+        credentials.password = options.password;
+      }
+    } else {
+      credentials.username = options.user;
+      credentials.password = options.password;
+    }
+
+    return credentials;
   }
 
-  // Otherwise, prompt
+  // Otherwise, prompt interactively
   const answers = await inquirer.prompt([
     {
       type: 'list',
@@ -225,29 +250,100 @@ async function getCredentials(databaseName: string, options: ConnectOptions): Pr
       name: 'database',
       message: 'Database name:',
       default: options.database || databaseName
-    },
-    {
-      type: 'input',
-      name: 'username',
-      message: 'Username:',
-      default: options.user || 'root'
-    },
-    {
-      type: 'password',
-      name: 'password',
-      message: 'Password:',
-      mask: '*'
     }
   ]);
 
-  return {
+  const credentials: ConnectionCredentials = {
     type: answers.type,
     host: answers.host,
     port: parseInt(answers.port),
-    database: answers.database,
-    username: answers.username,
-    password: answers.password
+    database: answers.database
   };
+
+  // Handle Azure SQL authentication
+  if (answers.type === 'azure-sql') {
+    const authAnswers = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'authMethod',
+        message: 'Authentication method:',
+        choices: [
+          { name: 'Azure AD (Device Code with MFA)', value: 'auto' },
+          { name: 'Azure AD (Device Code)', value: 'device-code' },
+          { name: 'Azure CLI (if logged in)', value: 'az-cli' },
+          { name: 'SQL Authentication (username/password)', value: 'sql-auth' }
+        ],
+        default: options.auth || 'auto'
+      }
+    ]);
+
+    if (authAnswers.authMethod !== 'sql-auth') {
+      // Azure AD authentication
+      const tenantAnswer = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'tenant',
+          message: 'Azure AD Tenant (leave empty for common/multi-tenant):',
+          default: options.tenant || '',
+          validate: (input: string) => {
+            if (!input) return true; // Empty is OK (common tenant)
+            // Validate tenant format (domain or GUID)
+            const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]\.onmicrosoft\.com$/;
+            const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            return domainPattern.test(input) || guidPattern.test(input) || 'Invalid tenant format';
+          }
+        }
+      ]);
+
+      credentials.azureAuth = {
+        method: authAnswers.authMethod,
+        tenant: tenantAnswer.tenant || undefined
+      };
+    } else {
+      // SQL authentication
+      const sqlAuthAnswers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'username',
+          message: 'SQL Username:',
+          default: options.user || 'sa'
+        },
+        {
+          type: 'password',
+          name: 'password',
+          message: 'SQL Password:',
+          mask: '*'
+        }
+      ]);
+
+      credentials.username = sqlAuthAnswers.username;
+      credentials.password = sqlAuthAnswers.password;
+      credentials.azureAuth = {
+        method: 'sql-auth'
+      };
+    }
+  } else {
+    // Traditional SQL authentication for other databases
+    const sqlAnswers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'username',
+        message: 'Username:',
+        default: options.user || 'root'
+      },
+      {
+        type: 'password',
+        name: 'password',
+        message: 'Password:',
+        mask: '*'
+      }
+    ]);
+
+    credentials.username = sqlAnswers.username;
+    credentials.password = sqlAnswers.password;
+  }
+
+  return credentials;
 }
 
 function createAdapter(credentials: ConnectionCredentials) {

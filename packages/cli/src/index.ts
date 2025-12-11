@@ -15,6 +15,7 @@ import { refreshCommand } from './commands/refresh';
 import { relationshipsCommand } from './commands/relationships';
 import { execCommand } from './commands/exec';
 import { aiInfoCommand } from './commands/ai-info';
+import { authListCommand, authLoginCommand, authLogoutCommand } from './commands/auth';
 
 const program = new Command();
 
@@ -117,6 +118,8 @@ program
   .option('--database <database>', 'Database name')
   .option('--user <user>', 'Database username')
   .option('--password <password>', 'Database password')
+  .option('--tenant <tenant>', 'Azure AD tenant (for Azure SQL)')
+  .option('--auth <method>', 'Authentication method (auto, device-code, az-cli, sql-auth)')
   .action(connectCommand);
 
 // List command
@@ -166,6 +169,28 @@ program
   .command('ai-info')
   .description('Show complete guide for AI assistants')
   .action(aiInfoCommand);
+
+// Auth command group
+const authCommand = program
+  .command('auth')
+  .description('Manage Azure AD authentication');
+
+authCommand
+  .command('list')
+  .description('List cached Azure AD accounts')
+  .action(authListCommand);
+
+authCommand
+  .command('login')
+  .description('Sign in to Azure AD')
+  .option('--tenant <tenant>', 'Azure AD tenant')
+  .action(authLoginCommand);
+
+authCommand
+  .command('logout')
+  .description('Sign out from Azure AD')
+  .option('--account <account-id>', 'Account tenant ID to sign out')
+  .action(authLogoutCommand);
 
 // Error handling
 program.on('command:*', () => {
