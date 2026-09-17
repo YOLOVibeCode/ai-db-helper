@@ -677,3 +677,129 @@ To activate a role in Cursor:
 4. Use role-specific capabilities as defined above
 
 Remember: The assistant will always display the current role and strictness level in banners around each response.
+
+---
+
+## UI AUTOMATION REQUIREMENTS (CRITICAL)
+
+All UI components MUST be automation-friendly for Playwright, browser automation, and MCP testing.
+
+### Data Test IDs (MANDATORY)
+
+Add `data-testid` attributes to ALL interactive elements and key containers:
+
+| Element Type | Pattern | Example |
+|-------------|---------|---------|
+| Buttons | `data-testid="btn-{action}"` | `data-testid="btn-submit"`, `data-testid="btn-cancel"` |
+| Forms | `data-testid="form-{name}"` | `data-testid="form-login"` |
+| Inputs | `data-testid="input-{field}"` | `data-testid="input-email"` |
+| Links | `data-testid="link-{destination}"` | `data-testid="link-dashboard"` |
+| Modals | `data-testid="modal-{name}"` | `data-testid="modal-confirm"` |
+| Tables | `data-testid="table-{name}"` | `data-testid="table-users"` |
+| Table Rows | `data-testid="row-{identifier}"` | `data-testid="row-user-123"` |
+| Cards | `data-testid="card-{name}"` | `data-testid="card-profile"` |
+| Dropdowns | `data-testid="dropdown-{name}"` | `data-testid="dropdown-status"` |
+| Checkboxes | `data-testid="checkbox-{name}"` | `data-testid="checkbox-agree"` |
+
+### Semantic HTML (MANDATORY)
+
+- Use proper semantic elements (`<button>`, `<a>`, `<form>`, `<input>`) instead of divs with click handlers
+- Use `<button type="button">` for actions, `<button type="submit">` for form submissions
+- Use `<a href>` for navigation, not buttons with onClick navigation
+
+### Accessible Labels (MANDATORY)
+
+- Include `aria-label` for elements without visible text
+- Use proper `<label htmlFor="id">` elements for form inputs
+- Add `aria-describedby` for error messages linked to inputs
+
+### Stable Selectors (MANDATORY)
+
+- NEVER rely on auto-generated class names (CSS-in-JS hashes) as primary selectors
+- ALWAYS use `data-testid` for test targeting
+- Avoid using indexes or nth-child selectors
+
+### Loading & Error States (MANDATORY)
+
+- Add `data-loading="true|false"` attribute for async states
+- Use `data-testid="loading-{component}"` for loading indicators
+- Use `data-testid="error-{field}"` for validation/error messages
+- Use `data-testid="empty-{component}"` for empty states
+
+### Example Component:
+
+```tsx
+<form data-testid="form-login" onSubmit={handleSubmit}>
+  <div>
+    <label htmlFor="email">Email</label>
+    <input
+      id="email"
+      data-testid="input-email"
+      type="email"
+      aria-describedby="email-error"
+    />
+    {errors.email && (
+      <span id="email-error" data-testid="error-email" role="alert">
+        {errors.email}
+      </span>
+    )}
+  </div>
+  
+  <button
+    type="submit"
+    data-testid="btn-submit-login"
+    data-loading={isLoading}
+    disabled={isLoading}
+    aria-label="Submit login form"
+  >
+    {isLoading ? 'Signing in...' : 'Sign In'}
+  </button>
+</form>
+```
+
+### Self-Check for UI Automation:
+
+- [ ] All interactive elements have `data-testid`
+- [ ] Forms use semantic HTML elements
+- [ ] Inputs have associated labels
+- [ ] Loading states are indicated with `data-loading`
+- [ ] Error messages have `data-testid="error-*"`
+- [ ] No reliance on generated CSS classes for testing
+
+---
+
+## MODULAR CODE STRUCTURE (YOLO/Rapid Prototype)
+
+### Purpose
+Keep rapid prototype code manageable while allowing flexibility for fast iteration.
+
+### SIZE THRESHOLDS (Relaxed for Prototyping)
+
+| Metric | Limit | Rationale |
+|--------|-------|-----------|
+| **File Length** | 200 lines max | Quick to scan and modify |
+| **Function** | 30 lines max | Easy to understand at a glance |
+| **Component** | 150 lines max | Prototype-friendly |
+| **Parameters** | 5 max | Simple interfaces |
+| **Nesting Depth** | 3 levels max | Readable |
+
+### WHEN LIMITS ARE EXCEEDED
+
+```
+If File > 200 lines:
+  → Split into logical modules
+  → Don't over-engineer - just separate concerns
+
+If Function > 30 lines:
+  → Extract obvious helpers
+  → Keep it simple - this is a prototype
+```
+
+### SELF-CHECK UPDATE
+
+Add to existing checklist:
+- [ ] Files under 200 lines (prototype-friendly)
+- [ ] Functions under 30 lines
+- [ ] Code is quick to understand and modify
+- [ ] No premature abstractions
+
